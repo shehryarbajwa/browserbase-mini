@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Browserbase WebSocket Debugger</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+        .header p {
+            opacity: 0.9;
+            font-size: 16px;
+        }
+        .content {
+            padding: 30px;
+        }
+        .status {
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            font-weight: 600;
+            text-align: center;
+            font-size: 18px;
+            transition: all 0.3s;
+        }
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+            border: 2px solid #c3e6cb;
+        }
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+            border: 2px solid #f5c6cb;
+        }
+        .input-group {
+            margin-bottom: 20px;
+        }
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+            font-size: 14px;
+        }
+        .input-group input {
+            width: 100%;
+            padding: 14px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        .input-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .button-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+            margin-bottom: 25px;
+        }
+        button {
+            padding: 14px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            color: white;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        .btn-success {
+            background: linear-gradient(135deg, #56ab2f 0%, #a8e063 100%);
+        }
+        .btn-success:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(86, 171, 47, 0.4);
+        }
+        .btn-danger {
+            background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
+        }
+        .btn-danger:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(235, 51, 73, 0.4);
+        }
+        .btn-info {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }
+        .btn-info:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(79, 172, 254, 0.4);
+        }
+        .output-container {
+            background: #1e1e1e;
+            border-radius: 8px;
+            padding: 20px;
+            height: 400px;
+            overflow-y: auto;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .output-container::-webkit-scrollbar {
+            width: 10px;
+        }
+        .output-container::-webkit-scrollbar-track {
+            background: #2d2d2d;
+        }
+        .output-container::-webkit-scrollbar-thumb {
+            background: #555;
+            border-radius: 5px;
+        }
+        .log-entry {
+            margin: 8px 0;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        .log-info {
+            color: #61dafb;
+        }
+        .log-send {
+            color: #98c379;
+            background: rgba(152, 195, 121, 0.1);
+        }
+        .log-receive {
+            color: #e5c07b;
+            background: rgba(229, 192, 123, 0.1);
+        }
+        .log-success {
+            color: #98c379;
+            font-weight: bold;
+        }
+        .log-error {
+            color: #e06c75;
+            font-weight: bold;
+            background: rgba(224, 108, 117, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔍 Browserbase WebSocket Debugger</h1>
+            <p>Control Chrome browsers via Chrome DevTools Protocol</p>
+        </div>
+        
+        <div class="content">
+            <div id="status" class="status disconnected">
+                ❌ Disconnected
+            </div>
+
+            <div class="input-group">
+                <label>Session ID:</label>
+                <input type="text" id="sessionId" placeholder="Enter session ID from your API">
+            </div>
+            
+            <div class="button-grid">
+                <button onclick="connect()" class="btn-primary">🔌 Connect</button>
+                <button onclick="disconnect()" class="btn-danger">❌ Disconnect</button>
+                <button onclick="navigateTo('https://google.com')" class="btn-success" id="googleBtn" disabled>🌐 Google</button>
+                <button onclick="navigateTo('https://github.com')" class="btn-success" id="githubBtn" disabled>🐙 GitHub</button>
+                <button onclick="navigateTo('https://reddit.com')" class="btn-success" id="redditBtn" disabled>🤖 Reddit</button>
+                <button onclick="navigateTo('https://amazon.com')" class="btn-success" id="amazonBtn" disabled>📦 Amazon</button>
+                <button onclick="customNavigate()" class="btn-info" id="customBtn" disabled>🔗 Custom URL</button>
+                <button onclick="clearLogs()" class="btn-info">🗑️ Clear Logs</button>
+            </div>
+
+            <h3 style="margin-bottom: 15px; color: #333;">Console Output:</h3>
+            <div class="output-container" id="output"></div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let messageId = 1;
+        let currentTargetId = null;
+
+        function log(message, type = 'info') {
+            const output = document.getElementById('output');
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            entry.textContent = `[${timestamp}] ${message}`;
+            output.appendChild(entry);
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function updateStatus(connected) {
+            const status = document.getElementById('status');
+            const buttons = ['googleBtn', 'githubBtn', 'redditBtn', 'amazonBtn', 'customBtn'];
+            
+            if (connected) {
+                status.textContent = '✅ Connected - Ready to browse!';
+                status.className = 'status connected';
+                buttons.forEach(id => document.getElementById(id).disabled = false);
+            } else {
+                status.textContent = '❌ Disconnected - Enter session ID and connect';
+                status.className = 'status disconnected';
+                buttons.forEach(id => document.getElementById(id).disabled = true);
+            }
+        }
+
+        function connect() {
+            const sessionId = document.getElementById('sessionId').value.trim();
+            if (!sessionId) {
+                alert('⚠️ Please enter a session ID first!');
+                return;
+            }
+
+            const wsUrl = `ws://localhost:8080/v1/sessions/${sessionId}/ws`;
+            log(`🔌 Connecting to ${wsUrl}...`, 'info');
+
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                log('✅ WebSocket connected successfully!', 'success');
+                updateStatus(true);
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                log(`← Received: ${JSON.stringify(data, null, 2)}`, 'receive');
+                
+                // Handle target creation response
+                if (data.result && data.result.targetId) {
+                    currentTargetId = data.result.targetId;
+                    log(`✅ New browser tab created: ${currentTargetId}`, 'success');
+                }
+
+                // Handle navigation response
+                if (data.result && data.result.frameId) {
+                    log(`✅ Page navigation successful!`, 'success');
+                }
+
+                // Handle errors
+                if (data.error) {
+                    log(`❌ Error: ${data.error.message}`, 'error');
+                }
+            };
+
+            ws.onerror = (error) => {
+                log(`❌ WebSocket error: ${error}`, 'error');
+            };
+
+            ws.onclose = () => {
+                log('🔌 Connection closed', 'info');
+                updateStatus(false);
+                currentTargetId = null;
+            };
+        }
+
+        function sendCommand(method, params = {}) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                alert('⚠️ Not connected! Click Connect first.');
+                return false;
+            }
+
+            const command = {
+                id: messageId++,
+                method: method,
+                params: params
+            };
+
+            log(`→ Sending: ${JSON.stringify(command)}`, 'send');
+            ws.send(JSON.stringify(command));
+            return true;
+        }
+
+        function navigateTo(url) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                alert('⚠️ Not connected!');
+                return;
+            }
+
+            log(`🚀 Creating new tab and navigating to: ${url}`, 'info');
+            
+            // Browserless requires Target.createTarget with URL
+            sendCommand('Target.createTarget', { url: url });
+        }
+
+        function customNavigate() {
+            const url = prompt('Enter URL (include https://):');
+            if (url) {
+                navigateTo(url);
+            }
+        }
+
+        function disconnect() {
+            if (ws) {
+                log('🔌 Disconnecting...', 'info');
+                ws.close();
+                ws = null;
+                currentTargetId = null;
+            }
+        }
+
+        function clearLogs() {
+            document.getElementById('output').innerHTML = '';
+            log('🗑️ Logs cleared', 'info');
+        }
+
+        // Keyboard shortcut: Ctrl+Enter to connect
+        document.getElementById('sessionId').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                connect();
+            }
+        });
+    </script>
+</body>
+</html>

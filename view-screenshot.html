@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Screenshot Viewer</title>
+    <style>
+        body {
+            font-family: Arial;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        img {
+            border: 2px solid #ddd;
+            padding: 10px;
+            background: #f5f5f5;
+        }
+        .enlarged {
+            width: 400px;
+            height: 400px;
+            image-rendering: pixelated;
+        }
+    </style>
+</head>
+<body>
+    <h1>Screenshot Viewer</h1>
+    
+    <h3>Actual Size (1x1 pixel):</h3>
+    <img id="actual" src="" alt="Screenshot">
+    
+    <h3>Enlarged (400x400 - you can see the single pixel):</h3>
+    <img id="enlarged" src="" alt="Screenshot enlarged" class="enlarged">
+    
+    <button onclick="fetchScreenshot()">Fetch Screenshot</button>
+    
+    <script>
+        async function fetchScreenshot() {
+            const sessionId = prompt('Enter session ID:');
+            if (!sessionId) return;
+            
+            const response = await fetch(`http://localhost:8080/v1/sessions/${sessionId}/screenshot`);
+            const data = await response.json();
+            
+            document.getElementById('actual').src = data.screenshot;
+            document.getElementById('enlarged').src = data.screenshot;
+            
+            alert('Screenshot loaded! (It\'s a 1x1 pixel so you can barely see it)');
+        }
+    </script>
+</body>
+</html>
