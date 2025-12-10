@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"time"
@@ -71,6 +72,13 @@ func (p *Pool) LaunchBrowserWithOptions(ctx context.Context, opts LaunchBrowserO
 			"region":     p.region,
 			"managed-by": "browserbase-mini",
 		},
+		Env: []string{
+			"CONNECTION_TIMEOUT=-1",        // Disable connection timeout
+			"MAX_CONCURRENT_SESSIONS=1",    // Only allow 1 session per container
+			"PREBOOT_CHROME=true",          // Pre-boot Chrome for faster startup
+			"KEEP_ALIVE=true",              // Keep connections alive
+			"EXIT_ON_HEALTH_FAILURE=false", // Don't exit on health check failures
+		},
 		ExposedPorts: nat.PortSet{
 			"3000/tcp": struct{}{},
 		},
@@ -111,14 +119,18 @@ func (p *Pool) LaunchBrowserWithOptions(ctx context.Context, opts LaunchBrowserO
 		return nil, fmt.Errorf("failed to start container: %w", err)
 	}
 
-	time.Sleep(2 * time.Second)
-
+	// Wait for container to be ready
 	inspect, err := p.client.ContainerInspect(ctx, resp.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to inspect container: %w", err)
 	}
 
 	port := inspect.NetworkSettings.Ports["3000/tcp"][0].HostPort
+
+	// Wait for the browser to be ready by checking the /json/version endpoint
+	if err := p.waitForBrowserReady(port); err != nil {
+		return nil, fmt.Errorf("browser failed to become ready: %w", err)
+	}
 
 	instance := &BrowserInstance{
 		ContainerID: resp.ID,
@@ -183,4 +195,25 @@ func (p *Pool) EnsureImage(ctx context.Context) error {
 
 func (p *Pool) Close() error {
 	return p.client.Close()
+}
+
+// waitForBrowserReady waits for the browser to be ready by checking the /json/version endpoint
+func (p *Pool) waitForBrowserReady(port string) error {
+	url := fmt.Sprintf("http://localhost:%s/json/version", port)
+	maxRetries := 20 // 10 seconds total (20 * 500ms)
+
+	for i := 0; i < maxRetries; i++ {
+		resp, err := http.Get(url)
+		if err == nil {
+			resp.Body.Close()
+			if resp.StatusCode == 200 {
+				// Give it a bit more time for WebSocket to be fully ready
+				time.Sleep(500 * time.Millisecond)
+				return nil
+			}
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	return fmt.Errorf("browser did not become ready after %d retries", maxRetries)
 }

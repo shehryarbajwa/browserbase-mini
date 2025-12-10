@@ -72,13 +72,7 @@ export default function SessionCard({ session, onStop }) {
             </span>
           </div>
         </div>
-        <button
-          className="delete-button"
-          onClick={() => onStop(session.id)}
-          disabled={session.status !== 'RUNNING'}
-        >
-          Stop Session
-        </button>
+
       </div>
 
       <div className="quick-links">

@@ -22,11 +22,21 @@ let screenshotLock = false;
         });
         console.error("✅ Connected to browser");
 
-        const pages = await browser.pages();
-        console.error("Found", pages.length, "pages");
-        
-        page = pages[0] || await browser.newPage();
-        console.error("Using page:", page.url());
+        // Close all existing pages to avoid stale references
+        const existingPages = await browser.pages();
+        console.error("Found", existingPages.length, "existing pages");
+        for (const p of existingPages) {
+            try {
+                await p.close();
+                console.error("Closed existing page:", p.url());
+            } catch (err) {
+                console.error("Error closing page:", err.message);
+            }
+        }
+
+        // Create a fresh page
+        page = await browser.newPage();
+        console.error("Created new page:", page.url());
 
         console.log(JSON.stringify({ status: "ready" }));
         console.error("Sent 'ready' signal");
@@ -93,6 +103,13 @@ let screenshotLock = false;
                     screenshotLock = true;
 
                     try {
+                        // Check if page is still connected
+                        if (!page || page.isClosed()) {
+                            console.error("⚠️ Page was closed, creating new page...");
+                            page = await browser.newPage();
+                            console.error("✅ Created new page");
+                        }
+
                         const currentUrl = page.url();
                         console.error("Taking screenshot of:", currentUrl);
 
@@ -123,19 +140,36 @@ let screenshotLock = false;
                         screenshotLock = false;
                         console.error("🔓 Released screenshot lock");
 
-                        
+                        console.log(JSON.stringify({
+                            status: "screenshot",
+                            data: screenshot
+                        }));
                         console.error("✅ Sent screenshot response");
 
                     } catch (err) {
                         console.error("❌ Screenshot failed:", err.message);
-                        
+
+                        // If page was closed during screenshot, recreate it
+                        if (err.message.includes('Session closed') || err.message.includes('Target closed')) {
+                            console.error("🔄 Page session lost, recreating page...");
+                            try {
+                                page = await browser.newPage();
+                                console.error("✅ Recreated page");
+                            } catch (recreateErr) {
+                                console.error("❌ Failed to recreate page:", recreateErr.message);
+                            }
+                        }
+
                         screenshotLock = false;
                         console.error("🔓 Released screenshot lock (after error)");
-                        
+
                         console.error("Returning blank PNG...");
                         const blankPng = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
-                        
-                        
+
+                        console.log(JSON.stringify({
+                            status: "screenshot",
+                            data: blankPng
+                        }));
                         console.error("✅ Sent blank PNG response");
                     }
                 }
